@@ -6,9 +6,13 @@ sudo apt-get install -y dkms build-essential bc libelf-dev linux-headers-`uname 
                         gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
 
 
-sudo apt install -y python3-all libpcap-dev libsodium-dev python3-pip python3-pyroute2 \
-            python3-future python3-twisted python3-serial python3-all-dev iw virtualenv \
-            debhelper dh-python build-essential network-manager
+sudo apt install -y \
+  python3-all python3-all-dev python3-pip python3-serial python3-pyroute2 \
+  python3-twisted libpcap-dev libsodium-dev iw virtualenv \
+  debhelper dh-python build-essential network-manager
+
+#sudo -H pip3 install --no-cache-dir future
+
 
 # This step will remove all available ORIGINAL drivers
 whiptail --title "Wireless drivers" --yesno "Do you want to remove the old drivers and install new one?" 10 50
@@ -24,6 +28,8 @@ if [ $? -eq 0 ]; then
   cd rtl8812au/
   sudo ./dkms-install.sh
   sudo modprobe 88XXau_wfb
+  cd ..
+  sudo rm -r rtl8812au
 fi
 
 # Preconfiguration power state of card
@@ -31,7 +37,7 @@ whiptail --title "Configure Wireless Driver" --msgbox "Configure Wireless Driver
 
 whiptail --title "Configure Wireless Driver" --yesno "Set Default power?" 10 50
 if [ $? -eq 0 ]; then
-sudo tee /etc/modprobe.d/wfb.conf > /dev/null << EOF
+  sudo tee /etc/modprobe.d/wfb.conf > /dev/null << EOF
 # blacklist stock module
 blacklist 88XXau
 blacklist 8812au
@@ -70,31 +76,73 @@ fi
 
 # Add UDEV configuration
 whiptail --title "Configure Wireless Driver" --msgbox "Set udev" 10 50
-sudo ifconfig
-# Extract the wireless interface name
-INTERFACE=$(ip link show | grep wlx | awk '{print $2}' | sed 's/://')
 
-# Check if the interface was found
+# --- Detect wireless interface using 88XXau_wfb / rtl88xxau_wfb driver ---
+echo "[INFO] Detecting wireless interface using Realtek AU WFB driver ..."
+
+# Accept both names and common variants, case-insensitive
+TARGETS=("88xxau_wfb" "rtl88xxau_wfb" "88xxau" "rtl8812au" "rtl88x2bu")
+
+normalize() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
+
+iface_driver() {
+  local ifc="$1"
+  # 1) ethtool (most reliable, returns "driver: <name>")
+  if command -v ethtool >/dev/null 2>&1; then
+    local d
+    d=$(ethtool -i "$ifc" 2>/dev/null | awk -F': ' '/^driver:/{print $2}')
+    if [ -n "$d" ]; then echo "$d"; return 0; fi
+  fi
+  # 2) kernel module basename
+  local p="/sys/class/net/$ifc/device/driver/module"
+  if [ -L "$p" ]; then
+    basename "$(readlink -f "$p")"
+    return 0
+  fi
+  # 3) driver dir basename
+  local d2="/sys/class/net/$ifc/device/driver"
+  if [ -L "$d2" ]; then
+    basename "$(readlink -f "$d2")"
+    return 0
+  fi
+  echo ""
+}
+
+INTERFACE=""
+for IFACE in $(ls /sys/class/net | grep -E '^wl'); do
+  D=$(iface_driver "$IFACE")
+  DL=$(normalize "$D")
+  for T in "${TARGETS[@]}"; do
+    if [ "$DL" = "$T" ]; then
+      INTERFACE="$IFACE"
+      break 2
+    fi
+  done
+done
+
 if [ -z "$INTERFACE" ]; then
-  echo "No wireless interface found."
+  echo "[ERR] No wireless interface found using AU/WFB driver."
+  echo "Listing all detected wireless interfaces and drivers:"
+  for IFACE in $(ls /sys/class/net | grep -E '^wl'); do
+    D=$(iface_driver "$IFACE"); echo "  → $IFACE uses driver: ${D:-unknown}"
+  done
   exit 1
+else
+  echo "[OK] Found wireless interface: $INTERFACE"
 fi
 
-# Extract the MAC address of the identified interface
-MAC_ADDRESS=$(ip link show "$INTERFACE" | grep ether | awk '{print $2}')
-
-# Check if the MAC address was successfully retrieved
+# Extract MAC and write persistent udev rule to rename to wfb0
+MAC_ADDRESS=$(cat /sys/class/net/$INTERFACE/address 2>/dev/null)
 if [ -z "$MAC_ADDRESS" ]; then
-  echo "Failed to retrieve the MAC address."
-  exit 1
+  echo "[ERR] Failed to retrieve MAC address for $INTERFACE"; exit 1
 fi
+echo "[INFO] Interface $INTERFACE has MAC $MAC_ADDRESS"
 
-# Add the MAC address to the udev rules file
-sudo tee /etc/udev/rules.d/65-persistent-net.rules > /dev/null <<EOF
-SUBSYSTEM=="net",ACTION=="add",ATTR{address}=="$MAC_ADDRESS",NAME="wfb0"
+sudo tee /etc/udev/rules.d/65-persistent-net.rules >/dev/null <<EOF
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="$MAC_ADDRESS", NAME="wfb0"
 EOF
+echo "[INFO] udev rule installed: $INTERFACE → wfb0 on next boot"
 
-echo "MAC address $MAC_ADDRESS for interface $INTERFACE added to /etc/udev/rules.d/65-persistent-net.rules"
 
 whiptail --title "Installing wfbng" --msgbox "install wfbng" 10 50
 git clone https://github.com/lexvyshnevskyy/wfb-ng.git
@@ -116,27 +164,62 @@ CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 2 \
 if [ $? -eq 0 ]; then
     case $CHOICE in
         1)
-sudo tee /etc/wifibroadcast.cfg > /dev/null << EOF
-[common]
-wifi_channel = 161     # 161 -- radio channel @5825 MHz, range: 5815–5835 MHz, width 20MHz
-                       # 1 -- radio channel @2412 Mhz,
-                       # see https://en.wikipedia.org/wiki/List_of_WLAN_channels for reference
-wifi_region = 'BO'     # Your country for CRDA (use BO or GY if you want max tx power)
+# === Copy configuration and scripts for Ground Station ===
+echo "[INFO] Installing Ground Station configuration..."
 
-[gs_mavlink]
-peer = 'connect://127.0.0.1:14550'  # outgoing connection
-# peer = 'listen://0.0.0.0:14550'   # incoming connection
+# Copy required files with sudo privileges
+sudo install -m 0755 ./configs/ground/video-forward-gs.sh /usr/local/bin/video-forward-gs.sh
+sudo install -m 0644 ./configs/ground/wifibroadcast.cfg /etc/wifibroadcast.cfg
 
-[gs_video]
-peer = 'connect://127.0.0.1:5600'  # outgoing connection for
-                                   # video sink (QGroundControl on GS)
-EOF
+sudo rm -rf /etc/mavlink-router
+sudo cp -r ./configs/ground/mavlink-router /etc/
 
-whiptail --title "Set default security keys?" --yesno "This will copy existing keys. If you want use fresh generated keys: Ignore this step and copy it manually from GS" 10 50
-  if [ $? -eq 0 ]; then
-    sudo rm /etc/gs.key
-    sudo cp ./wfb-ng/gs.key /etc
-  fi
+# ----- SYSTEMD UNIT MANAGEMENT (vendor units under /usr/lib) -----
+echo "[INFO] Installing systemd vendor units under /usr/lib/systemd/system"
+
+# Remove any local overrides that might shadow vendor units
+sudo rm -f /etc/systemd/system/wifibroadcast.service
+sudo rm -f /etc/systemd/system/wifibroadcast@.service
+sudo rm -f /etc/systemd/system/video-forward*.service
+
+# Install vendor units (use your configs/ground copies)
+sudo install -m 0644 ./configs/ground/wifibroadcast.service   /usr/lib/systemd/system/wifibroadcast.service
+sudo install -m 0644 ./configs/ground/wifibroadcast@.service  /usr/lib/systemd/system/wifibroadcast@.service
+sudo install -m 0644 ./configs/ground/video-forward.service      /usr/lib/systemd/system/video-forward.service
+
+
+# Reload systemd to pick up new vendor units
+sudo systemctl daemon-reload
+
+# Disable any other instances to avoid conflicts
+sudo systemctl disable --now wifibroadcast@drone.service 2>/dev/null || true
+sudo systemctl disable --now wifibroadcast@gs.service   2>/dev/null || true
+
+# Enable + start the GS instance; this will create:
+# /etc/systemd/system/wifibroadcast.service.wants/wifibroadcast@gs.service
+echo "[INFO] Enabling wifibroadcast@gs.service"
+sudo systemctl enable wifibroadcast@gs.service
+sudo systemctl start  wifibroadcast@gs.service
+
+# Ensure the main unit (if it’s a target/container) is enabled as well
+sudo systemctl enable wifibroadcast.service 2>/dev/null || true
+sudo systemctl start  wifibroadcast.service 2>/dev/null || true
+
+# Enable + start the air video forwarder
+echo "[INFO] Enabling video-forward.service"
+sudo systemctl enable video-forward.service
+sudo systemctl start  video-forward.service
+
+# Show resulting symlink to confirm
+echo "[INFO] Wants symlink:"
+ls -l /etc/systemd/system/wifibroadcast.service.wants/ | grep wifibroadcast@gs.service || true
+
+echo "[INFO] Ground station setup complete."
+
+sudo cp /etc/drone.key ~/
+sudo rm -f /etc/drone.key
+
+echo "[INFO] Ground station setup complete. Rebooting..."
 
 sudo apt-get remove modemmanager -y
 sudo apt install libfuse2 -y
@@ -144,55 +227,56 @@ sudo apt install libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev -y
 sudo apt-get install libpulse-mainloop-glib0
 sudo apt-get install libxcb-icccm4 libxcb-xinerama0 libxcb-keysyms1 libxcb-image0 libxcb-shm0 libxcb-randr0 libxcb-glx0
 sudo apt-get install libxcb-shape0 libxcb-shm0 libxcb-xfixes0 libxcb-sync1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-xinerama0 libxcb-keysyms1 libxcb-icccm4 libxcb-image0 libxcb-glx0 libxcb-dri3-0
-wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage
-chmod +x ./QGroundControl.AppImage
+#wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage
+#chmod +x ./QGroundControl.AppImage
 sudo usermod -a -G dialout $USER
-
-sudo systemctl enable wifibroadcast@gs.service
-sudo systemctl start wifibroadcast@gs
-
 sudo reboot
             ;;
         2)
-sudo tee /etc/wifibroadcast.cfg > /dev/null << EOF
-[common]
-wifi_channel = 161     # 161 -- radio channel @5825 MHz, range: 5815–5835 MHz, width 20MHz
-                       # 1 -- radio channel @2412 Mhz,
-                       # see https://en.wikipedia.org/wiki/List_of_WLAN_channels for reference
-wifi_region = 'BO'     # Your country for CRDA (use BO or GY if you want max tx power)
+# === Copy configuration and scripts for DRONE (Air Unit) ===
+echo "[INFO] Installing DRONE (air) configuration..."
 
-[drone_mavlink]
-# use autopilot connected to /dev/ttyUSB0 at 115200 baud:
-# peer = 'serial:ttyUSB0:115200'
+sudo install -m 0755 ./configs/air/video-forward.sh /usr/local/bin/video-forward.sh
+sudo install -m 0644 ./configs/air/wifibroadcast.cfg /etc/wifibroadcast.cfg
 
-# Connect to autopilot via malink-router or mavlink-proxy:
-# peer = 'listen://0.0.0.0:14550'   # incoming connection
-# peer = 'connect://127.0.0.1:14550'  # outgoing connection
+echo "[INFO] Installing systemd vendor units under /usr/lib/systemd/system"
 
-[drone_video]
-peer = 'listen://0.0.0.0:5602'  # listen for video stream (gstreamer on drone)
-EOF
-whiptail --title "Set default security keys?" --yesno "This will copy existing keys. If you want use fresh generated keys: Ignore this step and copy it manually from GS" 10 50
-  if [ $? -eq 0 ]; then
-        sudo rm /etc/gs.key
-        sudo cp ./wfb-ng/drone.key /etc
-  fi
+# Remove overrides that could shadow vendor units
+sudo rm -f /etc/systemd/system/wifibroadcast.service
+sudo rm -f /etc/systemd/system/wifibroadcast@.service
+sudo rm -f /etc/systemd/system/video-forward*.service
+
+# Install vendor units (generic wifibroadcast units + air video-forward)
+sudo install -m 0644 ./configs/ground/wifibroadcast.service   /usr/lib/systemd/system/wifibroadcast.service
+sudo install -m 0644 ./configs/ground/wifibroadcast@.service  /usr/lib/systemd/system/wifibroadcast@.service
+sudo install -m 0644 ./configs/air/video-forward.service      /usr/lib/systemd/system/video-forward.service
+
+# Pick up new units
+sudo systemctl daemon-reload
+
+# Avoid conflicts with GS instance
+sudo systemctl disable --now wifibroadcast@drone.service 2>/dev/null || true
+
+# Enable the drone instance (creates ...wifibroadcast.service.wants/wifibroadcast@drone.service)
+echo "[INFO] Enabling wifibroadcast@drone.service"
 sudo systemctl enable wifibroadcast@drone.service
-sudo systemctl start wifibroadcast@drone
+sudo systemctl start  wifibroadcast@drone.service
 
-# TODO: add services
-#whiptail --title "Start Video Transmission service?" --yesno "Start Video Transmission service? This will create service for GStreamer" 10 50
-#if [ $? -eq 0 ]; then
-#sudo tee /etc/modprobe.d/wfb.conf > /dev/null << EOF
-## blacklist stock module
-#blacklist 88XXau
-#blacklist 8812au
-#blacklist rtl8812au
-#blacklist rtl88x2bs
-## maximize output power, see note below
-#options 88XXau_wfb rtw_tx_pwr_idx_override=30
-#EOF
-#fi
+# (Optional) enable the main unit if used as a target
+sudo systemctl enable wifibroadcast.service 2>/dev/null || true
+sudo systemctl start  wifibroadcast.service 2>/dev/null || true
+
+# Enable + start the air video forwarder
+echo "[INFO] Enabling video-forward.service"
+sudo systemctl enable video-forward.service
+sudo systemctl start  video-forward.service
+
+# Show resulting symlinks for verification
+echo "[INFO] Wants symlinks:"
+ls -l /etc/systemd/system/wifibroadcast.service.wants/ | grep -E 'wifibroadcast@drone\.service|video-forward\.service' || true
+
+echo "[INFO] DRONE (air) setup complete."
+
 
 sudo reboot
             ;;
