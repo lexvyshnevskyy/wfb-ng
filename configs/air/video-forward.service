@@ -1,0 +1,14 @@
+[Unit]
+Description=Forward drone video stream to laptop
+After=wifibroadcast.service
+Requires=wifibroadcast@drone.service
+
+[Service]
+ExecStart=/usr/local/bin/video-forward.sh
+Restart=always
+RestartSec=1
+User=pi
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=multi-user.target
