@@ -5,6 +5,12 @@ sudo apt-get install -y dkms build-essential bc libelf-dev linux-headers-`uname 
                         git aircrack-ng gstreamer1.0-tools gstreamer1.0-plugins-good v4l-utils \
                         gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-gl
 
+sudo apt-get install -y \
+  libcamera0.5 libcamera-ipa libcamera-apps \
+  gstreamer1.0-libcamera gstreamer1.0-tools \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad v4l-utils
+
 
 sudo apt install -y \
   python3-all python3-all-dev python3-pip python3-serial python3-pyroute2 \
@@ -17,6 +23,7 @@ sudo apt install -y \
 # This step will remove all available ORIGINAL drivers
 whiptail --title "Wireless drivers" --yesno "Do you want to remove the old drivers and install new one?" 10 50
 if [ $? -eq 0 ]; then
+  sudo apt install -y raspberrypi-kernel-headers
   echo "Removing old drivers"
   sudo dkms uninstall -m rtl8812au -v 5.2.20.2 --all || true
   sudo dkms remove -m rtl8812au -v 5.2.20.2 --all || true
@@ -255,7 +262,7 @@ sudo install -m 0644 ./configs/air/video-forward.service      /usr/lib/systemd/s
 sudo systemctl daemon-reload
 
 # Avoid conflicts with GS instance
-sudo systemctl disable --now wifibroadcast@drone.service 2>/dev/null || true
+sudo systemctl disable --now wifibroadcast@gs.service 2>/dev/null || true
 
 # Enable the drone instance (creates ...wifibroadcast.service.wants/wifibroadcast@drone.service)
 echo "[INFO] Enabling wifibroadcast@drone.service"
@@ -274,6 +281,9 @@ sudo systemctl start  video-forward.service
 # Show resulting symlinks for verification
 echo "[INFO] Wants symlinks:"
 ls -l /etc/systemd/system/wifibroadcast.service.wants/ | grep -E 'wifibroadcast@drone\.service|video-forward\.service' || true
+
+sudo cp /etc/gs.key ~/
+sudo rm -f /etc/gs.key
 
 echo "[INFO] DRONE (air) setup complete."
 
