@@ -188,10 +188,11 @@ echo "[INFO] udev rule installed: $INTERFACE → wfb0 on next boot"
 
 
 whiptail --title "Installing wfbng" --msgbox "install wfbng" 10 50
+cd ~
 git clone https://github.com/lexvyshnevskyy/wfb-ng.git
-cd wfb-ng
+cd ~/wfb-ng
 sudo ./scripts/install_gs.sh wfb0
-echo "net.core.bpf_jit_enable = 1" | sudo tee -a /etc/sysctl.conf > /dev/null
+sudo echo "net.core.bpf_jit_enable = 1" | sudo tee -a /etc/sysctl.conf > /dev/null
 sudo sysctl -p
 
 sudo tee -a /etc/NetworkManager/NetworkManager.conf > /dev/null << EOF
