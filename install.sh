@@ -199,6 +199,8 @@ sudo tee -a /etc/NetworkManager/NetworkManager.conf > /dev/null << EOF
 unmanaged-devices=interface-name:wfb0
 EOF
 
+cd ~/wfb-ng
+
 CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 2 \
 "1" "GS" \
 "2" "DRONE" 3>&1 1>&2 2>&3)
