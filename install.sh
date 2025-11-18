@@ -20,23 +20,59 @@ sudo apt install -y \
 #sudo -H pip3 install --no-cache-dir future
 
 
-# This step will remove all available ORIGINAL drivers
-whiptail --title "Wireless drivers" --yesno "Do you want to remove the old drivers and install new one?" 10 50
+###############################################################################
+# 1. Remove old drivers and install rtl8812au / rtl8812eu
+###############################################################################
+whiptail --title "Wireless drivers" --yesno "Do you want to remove the old drivers and install a new one?" 10 50
 if [ $? -eq 0 ]; then
-  sudo apt install -y raspberrypi-kernel-headers
-  echo "Removing old drivers"
-  sudo dkms uninstall -m rtl8812au -v 5.2.20.2 --all || true
-  sudo dkms remove -m rtl8812au -v 5.2.20.2 --all || true
-  sudo dkms uninstall -m rtl88x2bu -v 5.13.1 --all || true
-  sudo dkms remove -m rtl88x2bu -v 5.13.1 --all || true
-  whiptail --title "Installing drivers" --msgbox "Installing drivers..." 10 50
-  git config --global http.postBuffer 157286400
-  git clone https://github.com/lexvyshnevskyy/rtl8812au.git
-  cd rtl8812au/
-  sudo ./dkms-install.sh
-  sudo modprobe 88XXau_wfb
-  cd ..
-  sudo rm -r rtl8812au
+  # Ask which driver to install
+  DRIVER_CHOICE=$(whiptail --title "Select Realtek driver" --menu \
+    "Which Realtek WFB driver do you want to install?" 15 70 2 \
+    "1" "RTL8812AU (default)" \
+    "2" "RTL8812EU" \
+    3>&1 1>&2 2>&3)
+
+  if [ $? -ne 0 ]; then
+    echo "[INFO] Driver installation cancelled by user."
+  else
+    case "$DRIVER_CHOICE" in
+      2)
+        DRIVER_NAME="rtl8812eu"
+        DRIVER_REPO="https://github.com/lexvyshnevskyy/rtl8812eu.git"
+        DRIVER_DIR="rtl8812eu"
+        # NOTE: adjust MODULE name if your EU driver builds a different module
+        DRIVER_MODULE="8812eu"
+        ;;
+      1|*)
+        DRIVER_NAME="rtl8812au"
+        DRIVER_REPO="https://github.com/lexvyshnevskyy/rtl8812au.git"
+        DRIVER_DIR="rtl8812au"
+        DRIVER_MODULE="88XXau_wfb"
+        ;;
+    esac
+
+    sudo apt install -y raspberrypi-kernel-headers
+    echo "Removing old drivers"
+    sudo dkms uninstall -m rtl8812au -v 5.2.20.2 --all || true
+    sudo dkms remove -m rtl8812au -v 5.2.20.2 --all || true
+    sudo dkms uninstall -m rtl88x2bu -v 5.13.1 --all || true
+    sudo dkms remove -m rtl88x2bu -v 5.13.1 --all || true
+    # If rtl8812eu also gets a dkms entry later, clean it here similarly.
+
+    whiptail --title "Installing drivers" --msgbox "Installing $DRIVER_NAME driver..." 10 50
+    git config --global http.postBuffer 157286400
+
+    TMP_DIR=$(mktemp -d)
+    cd "$TMP_DIR"
+    git clone "$DRIVER_REPO"
+    cd "$DRIVER_DIR"
+    sudo ./dkms-install.sh
+    sudo modprobe "$DRIVER_MODULE"
+    cd /
+    sudo rm -rf "$TMP_DIR"
+
+    echo "[OK] New driver installed and module loaded ($DRIVER_MODULE)."
+  fi
 fi
 
 # Preconfiguration power state of card
@@ -181,6 +217,22 @@ sudo install -m 0644 ./configs/ground/wifibroadcast.cfg /etc/wifibroadcast.cfg
 sudo rm -rf /etc/mavlink-router
 sudo cp -r ./configs/ground/mavlink-router /etc/
 
+# --------- Build and install mavlink-router from source ----------
+echo "[INFO] Installing mavlink-router from source..."
+git clone https://github.com/mavlink-router/mavlink-router.git
+cd mavlink-router
+git submodule update --init --recursive
+sudo apt install -y git meson ninja-build pkg-config gcc g++ systemd
+meson setup build .
+ninja -C build
+sudo ninja -C build install
+sudo rm -f /etc/systemd/system/mavlink-router.service
+sudo install -m 0644 ./build/mavlink-router.service /usr/lib/systemd/system/mavlink-router.service
+sudo systemctl daemon-reload
+sudo systemctl enable mavlink-router.service
+sudo systemctl start mavlink-router.service || true
+cd ..
+
 # ----- SYSTEMD UNIT MANAGEMENT (vendor units under /usr/lib) -----
 echo "[INFO] Installing systemd vendor units under /usr/lib/systemd/system"
 
@@ -295,4 +347,3 @@ else
     echo "User cancelled."
     exit 1
 fi
-
