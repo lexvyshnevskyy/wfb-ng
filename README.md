@@ -10,3 +10,7 @@ See https://github.com/svpcom/wfb-ng/wiki for additional info
 2. On this board only support one Video stream. Lack of resources
 3. Solder your Rx/Tx to pin 8/10 (GPIO 14/GPIO 15)
 
+---
+## QGroundControl configuration
+
+For this assembly visit [This manual](./doc/QGround.md)
