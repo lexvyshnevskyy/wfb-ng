@@ -7,7 +7,6 @@ Requires=wifibroadcast@gs.service
 ExecStart=/usr/local/bin/video-forward-gs.sh
 Restart=always
 RestartSec=1
-User=pi
 Environment=DISPLAY=:0
 
 [Install]
