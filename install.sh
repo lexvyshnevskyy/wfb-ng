@@ -277,29 +277,6 @@ if [ $? -eq 0 ]; then
     case $CHOICE in
         1)
 
-if whiptail --title "Ground Station IP" --yesno \
-"Add default static IP address for GS on eth0?\n\nIP: 192.168.144.10/24\nGW: 192.168.144.1" \
-10 60; then
-
-    echo "[INFO] Configuring static IP for eth0..."
-
-    # Remove existing eth0 connection if exists
-    EXISTING_CON=$(nmcli -t -f NAME,DEVICE con show | grep ":eth0" | cut -d: -f1)
-    if [ -n "$EXISTING_CON" ]; then
-        sudo nmcli con delete "$EXISTING_CON" || true
-    fi
-
-    # Create new static profile
-    sudo nmcli con add type ethernet ifname eth0 con-name eth0-static \
-    ipv4.addresses "192.168.30.10/24" \
-    ipv4.method manual \
-    ipv4.never-default yes \
-    connection.autoconnect yes
-
-    echo "[OK] Static IP configured: eth0 → 192.168.144.10"
-else
-    echo "[INFO] Skipped eth0 static IP configuration."
-fi
 
 # === Copy configuration and scripts for Ground Station ===
 echo "[INFO] Installing Ground Station configuration..."
@@ -380,9 +357,54 @@ sudo apt install libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev -y
 sudo apt-get install libpulse-mainloop-glib0
 sudo apt-get install libxcb-icccm4 libxcb-xinerama0 libxcb-keysyms1 libxcb-image0 libxcb-shm0 libxcb-randr0 libxcb-glx0
 sudo apt-get install libxcb-shape0 libxcb-shm0 libxcb-xfixes0 libxcb-sync1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-xinerama0 libxcb-keysyms1 libxcb-icccm4 libxcb-image0 libxcb-glx0 libxcb-dri3-0
-#wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage
-#chmod +x ./QGroundControl.AppImage
 sudo usermod -a -G dialout $USER
+
+if whiptail --title "Ground Station IP" --yesno \
+"Add default static IP address for GS on eth0?\n\nIP: 192.168.30.10/24\n" \
+10 60; then
+
+    # ---------------------------------------------------------------------------
+    # Detect correct Ethernet interface: eth0 or end1
+    # ---------------------------------------------------------------------------
+    ETH_IFACE=""
+
+    if nmcli device | grep -q "^eth0"; then
+        ETH_IFACE="eth0"
+    elif nmcli device | grep -q "^end1"; then
+        ETH_IFACE="end1"
+    else
+        echo "[ERR] No Ethernet interface (eth0 or end1) found. Exiting."
+        exit 1
+    fi
+
+    echo "[INFO] Using Ethernet interface: $ETH_IFACE"
+
+    # ---------------------------------------------------------------------------
+    # Remove existing connection for this interface
+    # ---------------------------------------------------------------------------
+    EXISTING_CON=$(nmcli -t -f NAME,DEVICE con show | grep ":${ETH_IFACE}" | cut -d: -f1)
+
+    if [ -n "$EXISTING_CON" ]; then
+        echo "[INFO] Removing existing connection: $EXISTING_CON"
+        sudo nmcli con delete "$EXISTING_CON" || true
+    fi
+
+    # ---------------------------------------------------------------------------
+    # Create new static connection profile
+    # ---------------------------------------------------------------------------
+    echo "[INFO] Creating new static IP profile on ${ETH_IFACE}"
+
+    sudo nmcli con add type ethernet ifname "$ETH_IFACE" con-name "${ETH_IFACE}-static" \
+        ipv4.addresses "192.168.30.10/24" \
+        ipv4.method manual \
+        ipv4.never-default yes \
+        connection.autoconnect yes
+
+    echo "[OK] Static IP configured: ${ETH_IFACE} → 192.168.30.10/24"
+else
+    echo "[INFO] Skipped eth0 static IP configuration."
+fi
+
 sudo reboot
             ;;
         2)
@@ -433,7 +455,7 @@ sudo rm -f /etc/gs.key
 
 echo "[INFO] DRONE (air) setup complete."
 
-
+sudo usermod -a -G dialout $USER
 sudo reboot
             ;;
     esac
