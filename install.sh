@@ -210,6 +210,31 @@ CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 2 \
 if [ $? -eq 0 ]; then
     case $CHOICE in
         1)
+
+if whiptail --title "Ground Station IP" --yesno \
+"Add default static IP address for GS on eth0?\n\nIP: 192.168.144.10/24\nGW: 192.168.144.1" \
+10 60; then
+
+    echo "[INFO] Configuring static IP for eth0..."
+
+    # Remove existing eth0 connection if exists
+    EXISTING_CON=$(nmcli -t -f NAME,DEVICE con show | grep ":eth0" | cut -d: -f1)
+    if [ -n "$EXISTING_CON" ]; then
+        sudo nmcli con delete "$EXISTING_CON" || true
+    fi
+
+    # Create new static profile
+    sudo nmcli con add type ethernet ifname eth0 con-name eth0-static \
+    ipv4.addresses "192.168.30.10/24" \
+    ipv4.method manual \
+    ipv4.never-default yes \
+    connection.autoconnect yes
+
+    echo "[OK] Static IP configured: eth0 → 192.168.144.10"
+else
+    echo "[INFO] Skipped eth0 static IP configuration."
+fi
+
 # === Copy configuration and scripts for Ground Station ===
 echo "[INFO] Installing Ground Station configuration..."
 
