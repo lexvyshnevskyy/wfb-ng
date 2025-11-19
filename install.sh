@@ -21,6 +21,56 @@ sudo apt install -y \
 
 
 ###############################################################################
+# Select board type (MANDATORY)
+###############################################################################
+
+BOARD_CHOICE=$(whiptail --title "Select Board" --menu \
+"Select your board type:" 15 70 4 \
+"1" "Raspberry Pi 3 / 4 / 5 (GS or Air)" \
+"2" "Raspberry Pi Zero 2W (Air only)" \
+"3" "Radxa Zero 3W – Ethernet mode (Air & Ground)" \
+"4" "Radxa Zero 3W – WiFi mode (Air only)" \
+3>&1 1>&2 2>&3)
+
+# If user cancels → exit script
+if [ $? -ne 0 ]; then
+    echo "[ERR] Board selection is required. Exiting."
+    exit 1
+fi
+
+# Convert selection to variable
+case "$BOARD_CHOICE" in
+    1)
+        BOARD_TYPE="rpi"
+        sudo apt install -y raspberrypi-kernel-headers
+        ;;
+    2)
+        BOARD_TYPE="rpi_zero2"
+        sudo apt install -y raspberrypi-kernel-headers
+        ;;
+    3)
+        BOARD_TYPE="radxa_zero3_eth"
+        sudo  apt install git openssh-server
+        sudo systemctl disable --now sddm && sudo systemctl set-default multi-user.target
+        sudo systemctl enable ssh
+        sudo systemctl start ssh
+        ;;
+    4)
+        BOARD_TYPE="radxa_zero3_wifi"
+                sudo  apt install git openssh-server
+                sudo systemctl disable --now sddm && sudo systemctl set-default multi-user.target
+                sudo systemctl enable ssh
+                sudo systemctl start ssh
+        ;;
+    *)
+        echo "[ERR] Invalid board selection. Exiting."
+        exit 1
+        ;;
+esac
+
+echo "[INFO] Selected board: $BOARD_TYPE"
+
+###############################################################################
 # 1. Remove old drivers and install rtl8812au / rtl8812eu
 ###############################################################################
 whiptail --title "Wireless drivers" --yesno "Do you want to remove the old drivers and install a new one?" 10 50
@@ -51,7 +101,7 @@ if [ $? -eq 0 ]; then
         ;;
     esac
 
-    sudo apt install -y raspberrypi-kernel-headers
+
     echo "Removing old drivers"
     sudo dkms uninstall -m rtl8812au -v 5.2.20.2 --all || true
     sudo dkms remove -m rtl8812au -v 5.2.20.2 --all || true
@@ -202,9 +252,25 @@ EOF
 
 cd ~/wfb-ng
 
-CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 2 \
-"1" "GS" \
-"2" "DRONE" 3>&1 1>&2 2>&3)
+###############################################################################
+# Select mode based on board type
+###############################################################################
+
+if [ "$BOARD_TYPE" = "rpi" ] || [ "$BOARD_TYPE" = "radxa_zero3_eth" ]; then
+    # GS-capable boards
+    CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 1 \
+"1" "GS (Ground Station)" \
+3>&1 1>&2 2>&3)
+elif [ "$BOARD_TYPE" = "rpi_zero2" ] || [ "$BOARD_TYPE" = "radxa_zero3_wifi" ]; then
+    # Air-only boards
+    CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 1 \
+"2" "DRONE (Air Unit)" \
+3>&1 1>&2 2>&3)
+else
+    echo "[ERR] Unknown BOARD_TYPE: $BOARD_TYPE"
+    exit 1
+fi
+
 
 # Check the exit status of whiptail (0 if OK was pressed, 1 if Cancel)
 if [ $? -eq 0 ]; then
