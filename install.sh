@@ -108,6 +108,7 @@ if [ $? -eq 0 ]; then
     sudo dkms uninstall -m rtl88x2bu -v 5.13.1 --all || true
     sudo dkms remove -m rtl88x2bu -v 5.13.1 --all || true
     # If rtl8812eu also gets a dkms entry later, clean it here similarly.
+    sudo dkms remove rtl88x2eu/5.15.0.1 --all
 
     whiptail --title "Installing drivers" --msgbox "Installing $DRIVER_NAME driver..." 10 50
     git config --global http.postBuffer 157286400
