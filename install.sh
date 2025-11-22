@@ -169,15 +169,32 @@ if [ $? -eq 0 ]; then
     cd "$TMP_DIR"
     git clone "$DRIVER_REPO"
     cd "$DRIVER_DIR"
+
     # ------------------------------------------------------------------
-    # Limit DKMS build jobs: use (PROCS_NUM-1) on Radxa + Pi Zero2 boards
+    # Limit DKMS build jobs: use (nproc-1) for small boards (Pi Zero2/Radxa)
     # ------------------------------------------------------------------
     if [ "$BOARD_TYPE" = "rpi_zero2" ] || \
        [ "$BOARD_TYPE" = "radxa_zero3_eth" ] || \
        [ "$BOARD_TYPE" = "radxa_zero3_wifi" ]; then
+
         if [ -f dkms.conf ]; then
-            echo "[INFO] Tweaking dkms.conf to use (PROCS_NUM-1) build jobs..."
-            sudo sed -i 's|^MAKE=.*|MAKE="'"'"'make'"'"' -j\$((PROCS_NUM-1)) KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build"|' dkms.conf
+            echo "[INFO] Adjusting dkms.conf MAKE jobs for small board..."
+
+            # Calculate jobs: min( nproc-1 , 16 ), but at least 1
+            JOBS=$(nproc)
+            if [ "$JOBS" -gt 1 ]; then
+                JOBS=$((JOBS-1))
+            fi
+            if [ "$JOBS" -gt 16 ]; then
+                JOBS=16
+            fi
+
+            # Replace MAKE= line with fixed -j<JOBS>
+            sudo sed -i \
+                "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
+                dkms.conf
+
+            echo "[INFO] dkms.conf: using make -j${JOBS}"
         fi
     fi
 
