@@ -43,10 +43,61 @@ case "$BOARD_CHOICE" in
     1)
         BOARD_TYPE="rpi"
         sudo apt install -y raspberrypi-kernel-headers
+        # -----------------------------
+        # Enable UART for MAVLink (Pi 3/4/5, Bookworm layout: /boot/firmware)
+        # -----------------------------
+        # Remove any existing serial console on UART
+        sudo sed -i 's/console=serial0,[0-9]* //g' /boot/firmware/cmdline.txt
+        sudo sed -i 's/console=ttyAMA0,[0-9]* //g' /boot/firmware/cmdline.txt
+
+        # Clean previous UART/Bluetooth lines to avoid duplicates
+        sudo sed -i '/^enable_uart=/d' /boot/firmware/config.txt
+        sudo sed -i '/^dtoverlay=disable-bt/d' /boot/firmware/config.txt
+
+        # Enable UART and disable BT to free UART on GPIO14/15
+        sudo tee -a /boot/firmware/config.txt > /dev/null <<EOF
+# Enable UART for MAVLink
+enable_uart=1
+# Disable Bluetooth to free primary UART for GPIO14/15
+dtoverlay=disable-bt
+EOF
         ;;
-    2)
+2)
         BOARD_TYPE="rpi_zero2"
         sudo apt install -y raspberrypi-kernel-headers
+
+        # -----------------------------
+        # Swap: universal 2G /swapfile
+        # -----------------------------
+        sudo swapoff -a || true
+        sudo rm -f /swapfile
+
+        # Try fallocate first (fast); fall back to dd if needed
+        if ! sudo fallocate -l 2G /swapfile 2>/dev/null; then
+            sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress
+        fi
+
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+
+        # Make /swapfile persistent in fstab (idempotent)
+        sudo sed -i '\|/swapfile|d' /etc/fstab
+        echo "/swapfile swap swap defaults 0 0" | sudo tee -a /etc/fstab > /dev/null
+
+        # -----------------------------
+        # Enable UART for MAVLink
+        # (Bookworm layout: /boot/firmware)
+        # -----------------------------
+        sudo sed -i 's/console=serial0,[0-9]* //g' /boot/firmware/cmdline.txt
+        sudo sed -i 's/console=ttyAMA0,[0-9]* //g' /boot/firmware/cmdline.txt
+
+        sudo tee -a /boot/firmware/config.txt > /dev/null <<EOF
+# Enable UART for MAVLink
+enable_uart=1
+# Disable Bluetooth (Pi Zero 2W only)
+dtoverlay=disable-bt
+EOF
         ;;
     3)
         BOARD_TYPE="radxa_zero3_eth"
@@ -108,7 +159,8 @@ if [ $? -eq 0 ]; then
     sudo dkms uninstall -m rtl88x2bu -v 5.13.1 --all || true
     sudo dkms remove -m rtl88x2bu -v 5.13.1 --all || true
     # If rtl8812eu also gets a dkms entry later, clean it here similarly.
-    sudo dkms remove rtl88x2eu/5.15.0.1 --all
+    sudo dkms uninstall -m rtl88x2eu -v 5.15.0.1 --all || true
+    sudo dkms remove -m rtl88x2eu -v 5.15.0.1 --all || true
 
     whiptail --title "Installing drivers" --msgbox "Installing $DRIVER_NAME driver..." 10 50
     git config --global http.postBuffer 157286400
@@ -137,6 +189,9 @@ blacklist 88XXau
 blacklist 8812au
 blacklist rtl8812au
 blacklist rtl88x2bs
+blacklist 88XXeu
+blacklist 8812eu
+blacklist rtl8812eu
 # maximize output power, see note below
 options 88XXau_wfb rtw_tx_pwr_idx_override=30
 EOF
@@ -149,6 +204,9 @@ blacklist 88XXau
 blacklist 8812au
 blacklist rtl8812au
 blacklist rtl88x2bs
+blacklist 88XXeu
+blacklist 8812eu
+blacklist rtl8812eu
 # maximize output power, see note below
 options 88XXau_wfb rtw_tx_pwr_idx_override=63
 EOF
@@ -161,6 +219,9 @@ blacklist 88XXau
 blacklist 8812au
 blacklist rtl8812au
 blacklist rtl88x2bs
+blacklist 88XXeu
+blacklist 8812eu
+blacklist rtl8812eu
 # maximize output power, see note below
 options 88XXau_wfb rtw_tx_pwr_idx_override=45
 EOF
@@ -175,7 +236,7 @@ whiptail --title "Configure Wireless Driver" --msgbox "Set udev" 10 50
 echo "[INFO] Detecting wireless interface using Realtek AU WFB driver ..."
 
 # Accept both names and common variants, case-insensitive
-TARGETS=("88xxau_wfb" "rtl88xxau_wfb" "88xxau" "rtl8812au" "rtl88x2bu")
+TARGETS=("88xxau_wfb" "rtl88xxau_wfb" "88xxau" "rtl8812au" "rtl8812eu" "rtl88x2bu" "8812eu" "88xxeu_wfb" "rtl88xxeu_wfb")
 
 normalize() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 
