@@ -169,6 +169,18 @@ if [ $? -eq 0 ]; then
     cd "$TMP_DIR"
     git clone "$DRIVER_REPO"
     cd "$DRIVER_DIR"
+    # ------------------------------------------------------------------
+    # Limit DKMS build jobs: use (PROCS_NUM-1) on Radxa + Pi Zero2 boards
+    # ------------------------------------------------------------------
+    if [ "$BOARD_TYPE" = "rpi_zero2" ] || \
+       [ "$BOARD_TYPE" = "radxa_zero3_eth" ] || \
+       [ "$BOARD_TYPE" = "radxa_zero3_wifi" ]; then
+        if [ -f dkms.conf ]; then
+            echo "[INFO] Tweaking dkms.conf to use (PROCS_NUM-1) build jobs..."
+            sudo sed -i 's|^MAKE=.*|MAKE="'"'"'make'"'"' -j\$((PROCS_NUM-1)) KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build"|' dkms.conf
+        fi
+    fi
+
     sudo ./dkms-install.sh
     sudo modprobe "$DRIVER_MODULE"
     cd /
@@ -416,9 +428,9 @@ echo "[INFO] Ground station setup complete. Rebooting..."
 sudo apt-get remove modemmanager -y
 sudo apt install libfuse2 -y
 sudo apt install libxcb-xinerama0 libxkbcommon-x11-0 libxcb-cursor-dev -y
-sudo apt-get install libpulse-mainloop-glib0
-sudo apt-get install libxcb-icccm4 libxcb-xinerama0 libxcb-keysyms1 libxcb-image0 libxcb-shm0 libxcb-randr0 libxcb-glx0
-sudo apt-get install libxcb-shape0 libxcb-shm0 libxcb-xfixes0 libxcb-sync1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-xinerama0 libxcb-keysyms1 libxcb-icccm4 libxcb-image0 libxcb-glx0 libxcb-dri3-0
+sudo apt-get install -y libpulse-mainloop-glib0
+sudo apt-get install -y libxcb-icccm4 libxcb-xinerama0 libxcb-keysyms1 libxcb-image0 libxcb-shm0 libxcb-randr0 libxcb-glx0
+sudo apt-get install -y libxcb-shape0 libxcb-shm0 libxcb-xfixes0 libxcb-sync1 libxcb-randr0 libxcb-render0 libxcb-render-util0 libxcb-xinerama0 libxcb-keysyms1 libxcb-icccm4 libxcb-image0 libxcb-glx0 libxcb-dri3-0
 sudo usermod -a -G dialout $USER
 
 if whiptail --title "Ground Station IP" --yesno \
