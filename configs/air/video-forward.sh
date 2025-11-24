@@ -13,9 +13,19 @@
 #      rtph264pay config-interval=1 pt=96 ! udpsink host=127.0.0.1 port=5603 sync=false
 
 # Classical
+#/usr/bin/gst-launch-1.0 -v \
+#  libcamerasrc ! videoconvert !   x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=30 byte-stream=true ! \
+#  h264parse ! rtph264pay config-interval=1 pt=96 !   udpsink host=10.5.0.2 port=5602
+
+# pipeline for radxa
 /usr/bin/gst-launch-1.0 -v \
-  libcamerasrc ! videoconvert !   x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=30 byte-stream=true ! \
-  h264parse ! rtph264pay config-interval=1 pt=96 !   udpsink host=10.5.0.2 port=5602
+  v4l2src device=/dev/video0 ! \
+    videoconvert ! videoscale ! \
+    video/x-raw,format=I420,width=1280,height=720 ! \
+    x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=30 byte-stream=true ! \
+    h264parse config-interval=1 ! \
+    rtph264pay pt=96 ! \
+    udpsink host=10.5.0.2 port=5602 sync=false async=false
 
 # Experimental
 #gst-launch-1.0 -v \
