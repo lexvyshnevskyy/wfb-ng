@@ -27,7 +27,7 @@ sudo apt install -y \
 BOARD_CHOICE=$(whiptail --title "Select Board" --menu \
 "Select your board type:" 15 70 4 \
 "1" "Raspberry Pi 3 / 4 / 5 (GS or Air)" \
-"2" "Raspberry Pi Zero 2W (GS(only via wlan0 interface) or Air" \
+"2" "Raspberry Pi Zero 2W (GS only via wlan0 interface, or Air)" \
 "3" "Radxa Zero 3W – Ethernet mode (Air & Ground)" \
 "4" "Radxa Zero 3W – WiFi mode (Air only)" \
 3>&1 1>&2 2>&3)
@@ -250,8 +250,8 @@ if [ $? -eq 0 ]; then
     git clone "$DRIVER_REPO"
     cd "$DRIVER_DIR"
 
-    # ------------------------------------------------------------------
-    # Limit DKMS build jobs: use (nproc-1) for small boards (Pi Zero2/Radxa)
+# ------------------------------------------------------------------
+    # Limit DKMS build jobs: use (nproc-1) for small boards, or -j3 on Pi Zero 2W
     # ------------------------------------------------------------------
     if [ "$BOARD_TYPE" = "rpi_zero2" ] || \
        [ "$BOARD_TYPE" = "radxa_zero3_eth" ] || \
@@ -264,13 +264,14 @@ if [ $? -eq 0 ]; then
                 # Pi Zero 2W → force make -j3
                 JOBS=3
             else
-            # Calculate jobs: min( nproc-1 , 16 ), but at least 1
-            JOBS=$(nproc)
-            if [ "$JOBS" -gt 1 ]; then
-                JOBS=$((JOBS-1))
-            fi
-            if [ "$JOBS" -gt 16 ]; then
-                JOBS=16
+                # Calculate jobs: min( nproc-1 , 16 ), but at least 1
+                JOBS=$(nproc)
+                if [ "$JOBS" -gt 1 ]; then
+                    JOBS=$((JOBS-1))
+                fi
+                if [ "$JOBS" -gt 16 ]; then
+                    JOBS=16
+                fi
             fi
 
             # Replace MAKE= line with fixed -j<JOBS>
