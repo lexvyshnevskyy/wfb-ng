@@ -281,6 +281,9 @@ if [ $? -eq 0 ]; then
     sudo sed -i \
         "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
         dkms.conf
+    sudo sed -i \
+            "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
+            /var/lib/dkms/rtl8812au/5.2.20.2/source/dkms.conf
 
     echo "[INFO] dkms.conf: using make -j${JOBS}"
     sudo ./dkms-install.sh
