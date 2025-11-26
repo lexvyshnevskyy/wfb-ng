@@ -262,13 +262,6 @@ if [ $? -eq 0 ]; then
 
             if [ "$BOARD_TYPE" = "rpi_zero2" ]; then
                 # Pi Zero 2W → force make -j3
-                JOBS=3
-                sudo sed -i \
-                    "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
-                    dkms.conf
-                sudo dkms add -m rtl8812au -v 5.2.20.2
-                sudo dkms build -m rtl8812au -v 5.2.20.2
-                sudo dkms install -m rtl8812au -v 5.2.20.2
             else
                 # Calculate jobs: min( nproc-1 , 16 ), but at least 1
                 JOBS=$(nproc)
@@ -283,6 +276,7 @@ if [ $? -eq 0 ]; then
                 "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
                 dkms.conf
             echo "[INFO] dkms.conf: using make -j${JOBS}"
+            sudo rm -r /usr/src/rtl8812au-5.2.20.2/dkms.conf
             sudo ./dkms-install.sh
             fi
         fi
