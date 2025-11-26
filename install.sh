@@ -259,13 +259,13 @@ if [ $? -eq 0 ]; then
 
         if [ -f dkms.conf ]; then
             echo "[INFO] Adjusting dkms.conf MAKE jobs for small board..."
-            sudo sed -i \
-                "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
-                dkms.conf
+
             if [ "$BOARD_TYPE" = "rpi_zero2" ]; then
                 # Pi Zero 2W → force make -j3
                 JOBS=3
-
+                sudo sed -i \
+                    "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
+                    dkms.conf
                 sudo dkms add -m rtl8812au -v 5.2.20.2
                 sudo dkms build -m rtl8812au -v 5.2.20.2
                 sudo dkms install -m rtl8812au -v 5.2.20.2
@@ -279,7 +279,9 @@ if [ $? -eq 0 ]; then
                     JOBS=16
                 fi
             # Replace MAKE= line with fixed -j<JOBS>
-
+            sudo sed -i \
+                "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
+                dkms.conf
             echo "[INFO] dkms.conf: using make -j${JOBS}"
             sudo ./dkms-install.sh
             fi
