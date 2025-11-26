@@ -28,7 +28,7 @@ BOARD_CHOICE=$(whiptail --title "Select Board" --menu \
 "Select your board type:" 15 70 4 \
 "1" "Raspberry Pi 3 / 4 / 5 (GS or Air)" \
 "2" "Raspberry Pi Zero 2W (GS only via wlan0 interface, or Air)" \
-"3" "Radxa Zero 3W – Ethernet mode (Air & Ground)" \
+"3" "Radxa Zero 3E – Ethernet mode (Air & Ground)" \
 "4" "Radxa Zero 3W – WiFi mode (Air only)" \
 3>&1 1>&2 2>&3)
 
@@ -263,8 +263,6 @@ if [ $? -eq 0 ]; then
             if [ "$BOARD_TYPE" = "rpi_zero2" ]; then
                 # Pi Zero 2W → force make -j3
                 JOBS=3
-                echo "[INFO] Building DKMS module with MAKEFLAGS=-j${JOBS}"
-                sudo MAKEFLAGS="-j${JOBS}" ./dkms-install.sh
             else
                 # Calculate jobs: min( nproc-1 , 16 ), but at least 1
                 JOBS=$(nproc)
@@ -275,17 +273,17 @@ if [ $? -eq 0 ]; then
                     JOBS=16
                 fi
             # Replace MAKE= line with fixed -j<JOBS>
-            sudo sed -i \
-                "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
-                dkms.conf
 
-            echo "[INFO] dkms.conf: using make -j${JOBS}"
-            sudo ./dkms-install.sh
             fi
         fi
     fi
 
+    sudo sed -i \
+        "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
+        dkms.conf
 
+    echo "[INFO] dkms.conf: using make -j${JOBS}"
+    sudo ./dkms-install.sh
     sudo modprobe "$DRIVER_MODULE"
     cd /
     sudo rm -rf "$TMP_DIR"
