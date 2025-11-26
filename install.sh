@@ -262,6 +262,7 @@ if [ $? -eq 0 ]; then
 
             if [ "$BOARD_TYPE" = "rpi_zero2" ]; then
                 # Pi Zero 2W → force make -j3
+                 JOBS=3
             else
                 # Calculate jobs: min( nproc-1 , 16 ), but at least 1
                 JOBS=$(nproc)
