@@ -272,18 +272,17 @@ if [ $? -eq 0 ]; then
                 if [ "$JOBS" -gt 16 ]; then
                     JOBS=16
                 fi
-            # Replace MAKE= line with fixed -j<JOBS>
-            sudo sed -i \
-                "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
-                dkms.conf
-            echo "[INFO] dkms.conf: using make -j${JOBS}"
-            sudo rm -r /usr/src/rtl8812au-5.2.20.2/dkms.conf
-            sudo ./dkms-install.sh
+
             fi
         fi
     fi
 
-
+            # Replace MAKE= line with fixed -j<JOBS>
+    sudo sed -i \
+         "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
+         dkms.conf
+    echo "[INFO] dkms.conf: using make -j${JOBS}"
+    sudo ./dkms-install.sh
     sudo modprobe "$DRIVER_MODULE"
     cd /
     sudo rm -rf "$TMP_DIR"
