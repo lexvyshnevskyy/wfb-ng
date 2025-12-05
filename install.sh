@@ -43,12 +43,11 @@ fi
 case "$MAIN_ACTION" in
   1)
     # Call your separate network setup script and exit
-    # Adjust the script name if needed (wifi_setup.sh / net_setup.sh / etc.)
-    if [ -x "${SCRIPT_DIR}/wifi_setup.sh" ]; then
-        BOARD_TYPE="" "${SCRIPT_DIR}/wifi_setup.sh"
+    if [ -x "${SCRIPT_DIR}/scrips/wifi_setup.sh" ]; then
+        BOARD_TYPE="" "${SCRIPT_DIR}/scripts/wifi_setup.sh"
     else
         echo "[ERR] Network setup script not found or not executable:"
-        echo "      ${SCRIPT_DIR}/wifi_setup.sh"
+        echo "      ${SCRIPT_DIR}/scripts/wifi_setup.sh"
         exit 1
     fi
     echo "[INFO] Network setup finished."
@@ -212,22 +211,6 @@ EOF
 esac
 
 echo "[INFO] Selected board: $BOARD_TYPE"
-
-###############################################################################
-# Optional Wi-Fi + IP configuration for Pi Zero 2W / Radxa Zero 3W WiFi
-###############################################################################
-if [ "$BOARD_TYPE" = "rpi_zero2" ] || [ "$BOARD_TYPE" = "radxa_zero3_wifi" ]; then
-    if whiptail --title "Wi-Fi setup" --yesno \
-"Do you want to run Wi-Fi/IP configuration helper now?
-
-This is for onboard wlan0 (management), not wfb0." \
-10 70; then
-        # Export BOARD_TYPE so wifi_setup.sh can see it (optional)
-        BOARD_TYPE="$BOARD_TYPE" ./scripts/wifi_setup.sh
-    else
-        echo "[INFO] Skipped onboard Wi-Fi configuration."
-    fi
-fi
 
 ###############################################################################
 # 1. Remove old drivers and install rtl8812au / rtl8812eu
@@ -440,11 +423,53 @@ EOF
 echo "[INFO] udev rule installed: $INTERFACE → wfb0 on next boot"
 
 
-whiptail --title "Installing wfbng" --msgbox "install wfbng" 10 50
+###############################################################################
+# Install WFB-ng: choose method
+###############################################################################
+whiptail --title "Install WFB-ng" --msgbox \
+"This will install the WFB-ng Ground Station software.
+
+You can choose between:
+  1) Prebuilt packages from svpcom repository
+  2) Build and install from source" \
+12 70
+
+INSTALL_METHOD=$(
+  whiptail --title "WFB-ng installation method" --menu \
+"Choose how to install WFB-ng:" 15 70 2 \
+"1" "Use prebuilt packages (svpcom apt repository)" \
+"2" "Build from source and install .deb" \
+3>&1 1>&2 2>&3
+)
+
+if [ $? -ne 0 ]; then
+    echo "[INFO] WFB-ng installation cancelled by user."
+    exit 1
+fi
+
+# Ensure repo is present in ~
 cd ~
-git clone https://github.com/lexvyshnevskyy/wfb-ng.git
+if [ ! -d ~/wfb-ng ]; then
+    git clone https://github.com/lexvyshnevskyy/wfb-ng.git
+fi
 cd ~/wfb-ng
-sudo ./scripts/install_gs.sh wfb0
+
+case "$INSTALL_METHOD" in
+  1)
+    echo "[INFO] Installing WFB-ng using prebuilt packages (install_gs.sh)..."
+    sudo ./scripts/install_gs.sh wfb0
+    ;;
+  2)
+    echo "[INFO] Building and installing WFB-ng from source (install_wfb_from_source.sh)..."
+    sudo ./scripts/install_wfb_from_source.sh wfb0
+    ;;
+  *)
+    echo "[ERR] Unknown install method selected."
+    exit 1
+    ;;
+esac
+
+# Common post-install tweaks
 sudo echo "net.core.bpf_jit_enable = 1" | sudo tee -a /etc/sysctl.conf > /dev/null
 sudo sysctl -p
 
