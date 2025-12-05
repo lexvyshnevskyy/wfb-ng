@@ -490,21 +490,129 @@ EOF
 cd ~/wfb-ng
 
 ###############################################################################
+# Mode selection helper: explain defaults per board
+###############################################################################
+show_mode_notice() {
+    case "$BOARD_TYPE" in
+        rpi)
+            whiptail --title "Mode Selection – Raspberry Pi 3/4/5" --msgbox \
+"On Raspberry Pi 3/4/5 both modes are supported.
+
+• GS (Ground Station) – default, tested with stock config.
+• DRONE (Air Unit) – also supported, but may require:
+    - tuning video / bitrate
+    - antenna / placement optimisation
+
+Select the mode according to how you will use this board." \
+15 75
+            ;;
+        rpi_zero2)
+            whiptail --title "Mode Selection – Raspberry Pi Zero 2W" --msgbox \
+"On Raspberry Pi Zero 2W:
+
+• DRONE (Air Unit) – DEFAULT and tested for real flights.
+• GS (Ground Station) – EXPERIMENTAL:
+    - limited CPU/RAM
+    - may require manual performance tuning
+    - not recommended as primary GS for long-range links
+
+Use GS here only if you know what you’re doing." \
+17 75
+            ;;
+        radxa_zero3_eth)
+            whiptail --title "Mode Selection – Radxa Zero 3E" --msgbox \
+"On Radxa Zero 3E:
+
+• GS (Ground Station) – DEFAULT, tested with Ethernet.
+• DRONE (Air Unit) – EXPERIMENTAL:
+    - possible, but depends on power/thermal conditions
+    - may require manual tweaking of configs and services
+
+Recommended: use as Ground Station over Ethernet." \
+17 75
+            ;;
+        radxa_zero3_wifi)
+            whiptail --title "Mode Selection – Radxa Zero 3W" --msgbox \
+"On Radxa Zero 3W:
+
+• DRONE (Air Unit) – DEFAULT and main target.
+• GS (Ground Station) – EXPERIMENTAL:
+    - Wi-Fi-only GS
+    - may need manual routing / performance tuning
+
+Recommended: use primarily as Air Unit." \
+17 75
+            ;;
+        *)
+            # Fallback – should not normally happen
+            whiptail --title "Mode Selection" --msgbox \
+"Unknown board type: ${BOARD_TYPE}
+
+Mode selection may not be optimal. You might need to adjust configs manually." \
+12 70
+            ;;
+    esac
+}
+
+###############################################################################
 # Select mode based on board type
 ###############################################################################
 
-if [ "$BOARD_TYPE" = "rpi" ] || [ "$BOARD_TYPE" = "radxa_zero3_eth" ]; then
-    # GS-capable boards
-    CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 1 \
-"1" "GS (Ground Station)" \
-3>&1 1>&2 2>&3)
-elif [ "$BOARD_TYPE" = "rpi_zero2" ] || [ "$BOARD_TYPE" = "radxa_zero3_wifi" ]; then
-    # Air-only boards
-    CHOICE=$(whiptail --title "Select Mode" --menu "Choose your option" 15 60 1 \
-"2" "DRONE (Air Unit)" \
-3>&1 1>&2 2>&3)
-else
-    echo "[ERR] Unknown BOARD_TYPE: $BOARD_TYPE"
+# 1) Show board-specific notice first
+show_mode_notice
+
+# 2) Prepare title + default item for menu
+case "$BOARD_TYPE" in
+    rpi)
+        MODE_TITLE="Select Mode – Raspberry Pi 3/4/5"
+        DEFAULT_ITEM="1"   # GS default
+        MENU_ITEMS=(
+            "1" "GS (Ground Station) – default, fully tested"
+            "2" "DRONE (Air Unit)"
+        )
+        ;;
+    rpi_zero2)
+        MODE_TITLE="Select Mode – Raspberry Pi Zero 2W"
+        DEFAULT_ITEM="2"   # DRONE default
+        MENU_ITEMS=(
+            "2" "DRONE (Air Unit) – DEFAULT, tested"
+            "1" "GS (Ground Station) – experimental"
+        )
+        ;;
+    radxa_zero3_eth)
+        MODE_TITLE="Select Mode – Radxa Zero 3E"
+        DEFAULT_ITEM="1"   # GS default
+        MENU_ITEMS=(
+            "1" "GS (Ground Station) – DEFAULT, tested (Ethernet)"
+            "2" "DRONE (Air Unit) – experimental"
+        )
+        ;;
+    radxa_zero3_wifi)
+        MODE_TITLE="Select Mode – Radxa Zero 3W"
+        DEFAULT_ITEM="2"   # DRONE default
+        MENU_ITEMS=(
+            "2" "DRONE (Air Unit) – DEFAULT, tested"
+            "1" "GS (Ground Station) – experimental"
+        )
+        ;;
+    *)
+        echo "[ERR] Unknown BOARD_TYPE: $BOARD_TYPE"
+        exit 1
+        ;;
+esac
+
+# 3) Show menu with proper default highlighted
+CHOICE=$(
+  whiptail --title "$MODE_TITLE" \
+           --default-item "$DEFAULT_ITEM" \
+           --menu "Choose how this board will run WFB-NG:" \
+           18 80 4 \
+           "${MENU_ITEMS[@]}" \
+           3>&1 1>&2 2>&3
+)
+
+if [ $? -ne 0 ]; then
+    echo "[INFO] User cancelled mode selection."
     exit 1
 fi
 
