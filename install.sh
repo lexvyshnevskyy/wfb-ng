@@ -27,7 +27,7 @@ sudo apt install -y \
 BOARD_CHOICE=$(whiptail --title "Select Board" --menu \
 "Select your board type:" 15 70 4 \
 "1" "Raspberry Pi 3 / 4 / 5 (GS or Air)" \
-"2" "Raspberry Pi Zero 2W (GS only via wlan0 interface, or Air)" \
+"2" "Raspberry Pi Zero 2W (GS or Air)" \
 "3" "Radxa Zero 3E – Ethernet mode (Air & Ground)" \
 "4" "Radxa Zero 3W – WiFi mode (Air only)" \
 3>&1 1>&2 2>&3)
@@ -64,40 +64,85 @@ EOF
         ;;
 2)
         BOARD_TYPE="rpi_zero2"
-        sudo apt install -y raspberrypi-kernel-headers
 
-        # -----------------------------
-        # Swap: universal 2G /swapfile
-        # -----------------------------
-        sudo swapoff -a || true
-        sudo rm -f /swapfile
+        ###############################################################################
+        # Decide next step: install driver now, or just configure system & reboot
+        ###############################################################################
+        MODE_ACTION=$(
+          whiptail --title "Installation steps" --menu \
+        "Installation will require a reboot to load Wi-Fi drivers.
 
-        # Try fallocate first (fast); fall back to dd if needed
-        if ! sudo fallocate -l 2G /swapfile 2>/dev/null; then
-            sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress
+        Choose what to do now:" 15 70 2 \
+        "1" "Install Realtek driver now (continue installation)" \
+        "2" "Configure system only and reboot" \
+        3>&1 1>&2 2>&3
+        )
+
+        if [ $? -ne 0 ]; then
+            echo "[INFO] User cancelled at installation mode choice."
+            exit 1
         fi
 
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
+        case "$MODE_ACTION" in
+          1)
+            INSTALL_DRIVER=1
+            ;;
+          2)
+            INSTALL_DRIVER=0
+            whiptail --title "Reboot required" --msgbox \
+        "Board configuration is done.
 
-        # Make /swapfile persistent in fstab (idempotent)
-        sudo sed -i '\|/swapfile|d' /etc/fstab
-        echo "/swapfile swap swap defaults 0 0" | sudo tee -a /etc/fstab > /dev/null
+        The system will now reboot to apply changes." \
+        10 60
+                sudo apt install -y raspberrypi-kernel-headers
 
-        # -----------------------------
-        # Enable UART for MAVLink
-        # (Bookworm layout: /boot/firmware)
-        # -----------------------------
-        sudo sed -i 's/console=serial0,[0-9]* //g' /boot/firmware/cmdline.txt
-        sudo sed -i 's/console=ttyAMA0,[0-9]* //g' /boot/firmware/cmdline.txt
+                # -----------------------------
+                # Swap: universal 2G /swapfile
+                # -----------------------------
+                sudo swapoff -a || true
+                sudo rm -f /swapfile
 
+                # Try fallocate first (fast); fall back to dd if needed
+                if ! sudo fallocate -l 2G /swapfile 2>/dev/null; then
+                    sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=progress
+                fi
+
+                sudo chmod 600 /swapfile
+                sudo mkswap /swapfile
+                sudo swapon /swapfile
+
+        # Enable UART and disable BT to free UART on GPIO14/15
         sudo tee -a /boot/firmware/config.txt > /dev/null <<EOF
-# Enable UART for MAVLink
-enable_uart=1
-# Disable Bluetooth (Pi Zero 2W only)
-dtoverlay=disable-bt
+# Decrease video memory size
+gpu_mem=8
 EOF
+
+                # Make /swapfile persistent in fstab (idempotent)
+                sudo sed -i '\|/swapfile|d' /etc/fstab
+                echo "/swapfile swap swap defaults 0 0" | sudo tee -a /etc/fstab > /dev/null
+
+                # -----------------------------
+                # Enable UART for MAVLink
+                # (Bookworm layout: /boot/firmware)
+                # -----------------------------
+                sudo sed -i 's/console=serial0,[0-9]* //g' /boot/firmware/cmdline.txt
+                sudo sed -i 's/console=ttyAMA0,[0-9]* //g' /boot/firmware/cmdline.txt
+
+                sudo tee -a /boot/firmware/config.txt > /dev/null <<EOF
+        # Enable UART for MAVLink
+        enable_uart=1
+        # Disable Bluetooth (Pi Zero 2W only)
+        dtoverlay=disable-bt
+EOF
+            sudo reboot
+            exit 0
+            ;;
+          *)
+            echo "[ERR] Invalid choice. Exiting."
+            exit 1
+            ;;
+        esac
+
         ;;
     3)
         BOARD_TYPE="radxa_zero3_eth"
