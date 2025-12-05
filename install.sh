@@ -266,7 +266,7 @@ if [ $? -eq 0 ]; then
     sudo dkms remove -m rtl8812au -v 5.2.20.2 --all || true
     sudo dkms uninstall -m rtl88x2bu -v 5.13.1 --all || true
     sudo dkms remove -m rtl88x2bu -v 5.13.1 --all || true
-    # If rtl8812eu also gets a dkms entry later, clean it here similarly.
+
     sudo dkms uninstall -m rtl88x2eu -v 5.15.0.1 --all || true
     sudo dkms remove -m rtl88x2eu -v 5.15.0.1 --all || true
 
@@ -627,10 +627,26 @@ fi
 if [ $? -eq 0 ]; then
     case $CHOICE in
         1)
-
-
 # === Copy configuration and scripts for Ground Station ===
 echo "[INFO] Installing Ground Station configuration..."
+cat > /etc/motd <<__EOF__
+WFB-ng: http://wfb-ng.org
+Setup HOWTO: https://github.com/svpcom/wfb-ng/wiki/Setup-HOWTO
+Community chat: (wfb-ng support) https://t.me/wfb_ng
+Fork from https://github.com/lexvyshnevskyy/wfb-ng
+
+Version: $release
+
+Quickstart:
+1. Run "wfb-cli gs" to monitor link state
+2. Run sudo systemctl restart video-forward.service or edit /usr/local/bin/video-forward-gs.sh to change gstreamer pipeline
+
+To set TX power edit /etc/modprobe.d/wfb.conf and reboot.
+
+In case of any failures check "sudo systemctl status wifibroadcast@gs" service status.
+See full logs via: "sudo journalctl -xu wifibroadcast@gs"
+__EOF__
+
 
 # Copy required files with sudo privileges
 sudo install -m 0755 ./configs/ground/video-forward-gs.sh /usr/local/bin/video-forward-gs.sh
@@ -761,6 +777,23 @@ sudo reboot
         2)
 # === Copy configuration and scripts for DRONE (Air Unit) ===
 echo "[INFO] Installing DRONE (air) configuration..."
+cat > /etc/motd <<__EOF__
+WFB-ng: http://wfb-ng.org
+Setup HOWTO: https://github.com/svpcom/wfb-ng/wiki/Setup-HOWTO
+Community chat: (wfb-ng support) https://t.me/wfb_ng
+Fork from https://github.com/lexvyshnevskyy/wfb-ng
+
+Version: $release
+
+Quickstart:
+1. Run "wfb-cli drone" to monitor link state
+2. Run sudo systemctl restart video-forward.service or edit /usr/local/bin/video-forward.sh to change gstreamer pipeline
+
+To set TX power edit /etc/modprobe.d/wfb.conf and reboot.
+
+In case of any failures check "sudo systemctl status wifibroadcast@drone" service status.
+See full logs via: "sudo journalctl -xu wifibroadcast@drone"
+__EOF__
 
 sudo install -m 0755 ./configs/air/video-forward.sh /usr/local/bin/video-forward.sh
 sudo install -m 0644 ./configs/air/wifibroadcast.cfg /etc/wifibroadcast.cfg
