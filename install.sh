@@ -41,9 +41,10 @@ MAIN_ACTION=$(
   whiptail --title "WFB-NG setup" --menu \
 "This is a setup tool for the WFB-NG system.
 
-Choose your action:" 15 75 2 \
-"1" "Setup your Wi-Fi and Ethernet interfaces" \
-"2" "Install driver and WFB-NG system" \
+Choose your action:" 15 75 3 \
+"1" "Install driver and WFB-NG system" \
+"2" "Setup your Wi-Fi and Ethernet interfaces" \
+"3" "Generate new drone/gs keys and copy to USB" \
 3>&1 1>&2 2>&3
 )
 
@@ -54,9 +55,13 @@ fi
 
 case "$MAIN_ACTION" in
   1)
+    echo "[INFO] Proceeding with driver + WFB-NG installation..."
+    # just continue to the rest of your script
+    ;;
+
+  2)
     # Call your separate network setup script and exit
     if [ -x "${SCRIPT_DIR}/scripts/wifi_setup.sh" ]; then
-        # Optionally pass BOARD_TYPE if you want, or just call it plain
         "${SCRIPT_DIR}/scripts/wifi_setup.sh"
     else
         echo "[ERR] Network setup script not found or not executable:"
@@ -67,9 +72,108 @@ case "$MAIN_ACTION" in
     exit 0
     ;;
 
-  2)
-    echo "[INFO] Proceeding with driver + WFB-NG installation..."
-    # just continue to the rest of your script
+  3)
+    ############################################################################
+    # Generate new drone/gs keys in current directory and copy to USB
+    ############################################################################
+    if ! command -v wfb_keygen >/dev/null 2>&1; then
+        whiptail --title "wfb_keygen not found" --msgbox \
+"wfb_keygen command is not available.
+
+Install WFB-ng tools first (or run install once with option 1)
+and then retry generating keys." 10 70
+        exit 1
+    fi
+
+    KEY_DIR="$(pwd)"
+    echo "[INFO] Generating keys in: $KEY_DIR"
+
+    ( cd "$KEY_DIR" && wfb_keygen )
+
+    if [ ! -f "$KEY_DIR/drone.key" ] || [ ! -f "$KEY_DIR/gs.key" ]; then
+        whiptail --title "Key generation error" --msgbox \
+"Key generation did not produce drone.key and gs.key in:
+
+  $KEY_DIR
+
+Aborting." 12 70
+        exit 1
+    fi
+
+    whiptail --title "Copy keys to USB" --msgbox \
+"drone.key and gs.key have been generated in:
+
+  $KEY_DIR
+
+Now attach a USB flash drive to copy these keys to it.
+The script will wait up to 30 seconds for the USB device." 14 75
+
+    # Wait for USB block device to appear
+    USB_DEV=""
+    for retry in {1..30}; do
+        for d in /dev/sd[a-z]; do
+            [ -b "$d" ] || continue
+            if udevadm info "$d" 2>/dev/null | grep -q "ID_BUS=usb"; then
+                USB_DEV="$d"
+                break 2
+            fi
+        done
+        sleep 1
+    done
+
+    if [ -z "$USB_DEV" ]; then
+        whiptail --title "USB not found" --msgbox \
+"No USB flash drive was detected within timeout.
+
+You can manually copy:
+  $KEY_DIR/drone.key
+  $KEY_DIR/gs.key
+
+later if needed." 12 70
+        exit 0
+    fi
+
+    echo "[INFO] USB flash drive detected: $USB_DEV"
+
+    # Prefer partition (e.g. /dev/sda1) if it exists
+    if [ -b "${USB_DEV}1" ]; then
+        USB_PART="${USB_DEV}1"
+    else
+        USB_PART="$USB_DEV"
+    fi
+
+    MNT="/mnt/wfb_keys"
+    sudo mkdir -p "$MNT"
+
+    echo "[INFO] Mounting $USB_PART on $MNT..."
+    if ! sudo mount "$USB_PART" "$MNT"; then
+        whiptail --title "Mount error" --msgbox \
+"ERROR: Could not mount $USB_PART.
+
+Please check the drive/filesystem and try again." 10 70
+        exit 1
+    fi
+
+    # Copy keys to root of flash drive
+    sudo cp "$KEY_DIR/drone.key" "$MNT/drone.key"
+    sudo cp "$KEY_DIR/gs.key"    "$MNT/gs.key"
+
+    sync
+
+    echo "[INFO] Unmounting USB drive..."
+    sudo umount "$MNT"
+    sudo rm "$MNT"
+
+    whiptail --title "Keys copied" --msgbox \
+"drone.key and gs.key have been copied to the USB flash drive.
+
+You can use:
+  • drone.key on the Air Unit
+  • gs.key on the Ground Station
+
+Script will now exit." 14 75
+
+    exit 0
     ;;
 
   *)
