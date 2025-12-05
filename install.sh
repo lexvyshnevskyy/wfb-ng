@@ -55,8 +55,9 @@ fi
 case "$MAIN_ACTION" in
   1)
     # Call your separate network setup script and exit
-    if [ -x "${SCRIPT_DIR}/scrips/wifi_setup.sh" ]; then
-        BOARD_TYPE="" "${SCRIPT_DIR}/scripts/wifi_setup.sh"
+    if [ -x "${SCRIPT_DIR}/scripts/wifi_setup.sh" ]; then
+        # Optionally pass BOARD_TYPE if you want, or just call it plain
+        "${SCRIPT_DIR}/scripts/wifi_setup.sh"
     else
         echo "[ERR] Network setup script not found or not executable:"
         echo "      ${SCRIPT_DIR}/scripts/wifi_setup.sh"
