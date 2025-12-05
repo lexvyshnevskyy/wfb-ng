@@ -17,7 +17,54 @@ sudo apt install -y \
   python3-twisted libpcap-dev libsodium-dev iw virtualenv \
   debhelper dh-python build-essential network-manager
 
-#sudo -H pip3 install --no-cache-dir future
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+###############################################################################
+# Main menu – choose what to do
+###############################################################################
+MAIN_ACTION=$(
+  whiptail --title "WFB-NG setup" --menu \
+"This is a setup tool for the WFB-NG system.
+
+Choose your action:" 15 75 2 \
+"1" "Setup your Wi-Fi and Ethernet interfaces" \
+"2" "Install driver and WFB-NG system" \
+3>&1 1>&2 2>&3
+)
+
+if [ $? -ne 0 ]; then
+    echo "[INFO] User cancelled at main menu."
+    exit 1
+fi
+
+case "$MAIN_ACTION" in
+  1)
+    # Call your separate network setup script and exit
+    # Adjust the script name if needed (wifi_setup.sh / net_setup.sh / etc.)
+    if [ -x "${SCRIPT_DIR}/wifi_setup.sh" ]; then
+        BOARD_TYPE="" "${SCRIPT_DIR}/wifi_setup.sh"
+    else
+        echo "[ERR] Network setup script not found or not executable:"
+        echo "      ${SCRIPT_DIR}/wifi_setup.sh"
+        exit 1
+    fi
+    echo "[INFO] Network setup finished."
+    exit 0
+    ;;
+
+  2)
+    echo "[INFO] Proceeding with driver + WFB-NG installation..."
+    # just continue to the rest of your script
+    ;;
+
+  *)
+    echo "[ERR] Invalid main menu choice. Exiting."
+    exit 1
+    ;;
+esac
 
 
 ###############################################################################
@@ -170,77 +217,13 @@ echo "[INFO] Selected board: $BOARD_TYPE"
 # Optional Wi-Fi + IP configuration for Pi Zero 2W / Radxa Zero 3W WiFi
 ###############################################################################
 if [ "$BOARD_TYPE" = "rpi_zero2" ] || [ "$BOARD_TYPE" = "radxa_zero3_wifi" ]; then
-
     if whiptail --title "Wi-Fi setup" --yesno \
-"Do you want to configure onboard Wi-Fi (wlan0) now?\n\nThis is for management/home network, not wfb0." \
+"Do you want to run Wi-Fi/IP configuration helper now?
+
+This is for onboard wlan0 (management), not wfb0." \
 10 70; then
-
-        # --- Ask SSID ---
-        WIFI_SSID=$(whiptail --inputbox "Enter Wi-Fi SSID:" 10 60 3>&1 1>&2 2>&3)
-        if [ $? -ne 0 ] || [ -z "$WIFI_SSID" ]; then
-            echo "[INFO] Wi-Fi SSID not provided, skipping Wi-Fi setup."
-        else
-            # --- Ask password (can be empty for open networks) ---
-            WIFI_PASS=$(whiptail --passwordbox "Enter Wi-Fi password (leave empty for open network):" 10 60 3>&1 1>&2 2>&3)
-            [ $? -ne 0 ] && WIFI_PASS=""
-
-            # Detect first Wi-Fi device (usually wlan0)
-            WIFI_IFACE=$(nmcli -t -f DEVICE,TYPE device | awk -F: '$2=="wifi"{print $1; exit}')
-
-            if [ -z "$WIFI_IFACE" ]; then
-                echo "[ERR] No Wi-Fi interface detected for management (TYPE=wifi). Skipping Wi-Fi setup."
-            else
-                echo "[INFO] Using Wi-Fi interface: $WIFI_IFACE"
-
-                # Remove old connection for this iface if exists
-                EXISTING_WIFI_CON=$(nmcli -t -f NAME,DEVICE con show | grep ":${WIFI_IFACE}" | cut -d: -f1)
-                if [ -n "$EXISTING_WIFI_CON" ]; then
-                    echo "[INFO] Removing existing Wi-Fi connection: $EXISTING_WIFI_CON"
-                    sudo nmcli con delete "$EXISTING_WIFI_CON" || true
-                fi
-
-                # Create new connection (DHCP by default)
-                if [ -n "$WIFI_PASS" ]; then
-                    echo "[INFO] Creating WPA/WPA2 Wi-Fi connection..."
-                    sudo nmcli dev wifi connect "$WIFI_SSID" password "$WIFI_PASS" ifname "$WIFI_IFACE" name "wifi-${WIFI_IFACE}" || \
-                        echo "[WARN] nmcli Wi-Fi connection failed."
-                else
-                    echo "[INFO] Creating OPEN Wi-Fi connection..."
-                    sudo nmcli dev wifi connect "$WIFI_SSID" ifname "$WIFI_IFACE" name "wifi-${WIFI_IFACE}" || \
-                        echo "[WARN] nmcli Wi-Fi connection failed."
-                fi
-
-                # Optional static IP on Wi-Fi
-                if whiptail --title "Wi-Fi IP mode" --yesno \
-"Use STATIC IP on Wi-Fi interface ${WIFI_IFACE}?\n\nYes → static IP\nNo  → DHCP (automatic)" \
-10 70; then
-
-                    WIFI_IP=$(whiptail --inputbox \
-"Enter IPv4 address with prefix (e.g. 192.168.1.50/24):" \
-10 70 "192.168.1.50/24" 3>&1 1>&2 2>&3)
-
-                    WIFI_GW=$(whiptail --inputbox \
-"Enter IPv4 gateway (e.g. 192.168.1.1):" \
-10 70 "192.168.1.1" 3>&1 1>&2 2>&3)
-
-                    if [ -n "$WIFI_IP" ]; then
-                        echo "[INFO] Setting static IP ${WIFI_IP}, GW ${WIFI_GW} on wifi-${WIFI_IFACE}"
-                        sudo nmcli con mod "wifi-${WIFI_IFACE}" \
-                            ipv4.addresses "$WIFI_IP" \
-                            ipv4.gateway "$WIFI_GW" \
-                            ipv4.method manual \
-                            ipv6.method ignore
-                    else
-                        echo "[WARN] No IP entered, keeping DHCP on Wi-Fi."
-                    fi
-                else
-                    echo "[INFO] Using DHCP on Wi-Fi (auto)."
-                    sudo nmcli con mod "wifi-${WIFI_IFACE}" \
-                        ipv4.method auto \
-                        ipv6.method ignore
-                fi
-            fi
-        fi
+        # Export BOARD_TYPE so wifi_setup.sh can see it (optional)
+        BOARD_TYPE="$BOARD_TYPE" ./scripts/wifi_setup.sh
     else
         echo "[INFO] Skipped onboard Wi-Fi configuration."
     fi
