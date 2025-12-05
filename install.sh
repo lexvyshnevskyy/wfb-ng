@@ -1,5 +1,9 @@
 #!/bin/bash
 
+sudo locale-gen en_US.UTF-8
+sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+
+
 # Required packages
 sudo apt-get install -y dkms build-essential bc libelf-dev linux-headers-`uname -r` whiptail \
                         git aircrack-ng gstreamer1.0-tools gstreamer1.0-plugins-good v4l-utils \
