@@ -37,7 +37,7 @@ apt -y install \
     python3-pip python3-pyroute2 python3-msgpack python3-twisted \
     python3-serial python3-jinja2 iw virtualenv debhelper dh-python \
     fakeroot build-essential libgstrtspserver-1.0-dev socat git \
-    libcatch2-dev
+    catch2
 
 # Build from existing repo directory
 cd "$REPO_ROOT"
