@@ -45,6 +45,7 @@ Choose your action:" 15 75 3 \
 "1" "Install driver and WFB-NG system" \
 "2" "Setup your Wi-Fi and Ethernet interfaces" \
 "3" "Generate new drone/gs keys and copy to USB" \
+"4" "Apply existing keys from USB (drone.key/gs.key)" \
 3>&1 1>&2 2>&3
 )
 
@@ -175,7 +176,20 @@ Script will now exit." 14 75
 
     exit 0
     ;;
+  4)
+    # Apply keys from USB (new script)
+    if [ -x "${SCRIPT_DIR}/scripts/apply_keys_from_usb.sh" ]; then
+        sudo "${SCRIPT_DIR}/scripts/apply_keys_from_usb.sh"
+    else
+        whiptail --title "Script not found" --msgbox \
+"apply_keys_from_usb.sh not found or not executable.
 
+Expected at:
+  ${SCRIPT_DIR}/scripts/apply_keys_from_usb.sh" 12 70
+        exit 1
+    fi
+    exit 0
+    ;;
   *)
     echo "[ERR] Invalid main menu choice. Exiting."
     exit 1
