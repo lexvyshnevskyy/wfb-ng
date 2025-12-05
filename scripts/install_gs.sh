@@ -62,7 +62,7 @@ then
 
     apt -y install python3-all python3-all-dev libpcap-dev libsodium-dev libevent-dev python3-pip python3-pyroute2 python3-msgpack \
        python3-twisted python3-serial python3-jinja2 iw virtualenv debhelper dh-python fakeroot build-essential \
-       libgstrtspserver-1.0-dev socat git libcatch2-dev
+       libgstrtspserver-1.0-dev socat git catch2
 
     tmpdir="$(mktemp -d)"
     git clone -b $release --depth 1 https://github.com/svpcom/wfb-ng.git "$tmpdir"
@@ -82,81 +82,6 @@ else
     echo "Using wifi autodetection"
 fi
 
-# Setup config
-cat <<EOF > /etc/wifibroadcast.cfg
-[common]
-wifi_channel = 165     # 165 -- radio channel @5825 MHz, range: 5815–5835 MHz, width 20MHz
-                       # 1 -- radio channel @2412 Mhz,
-                       # see https://en.wikipedia.org/wiki/List_of_WLAN_channels for reference
-wifi_region = 'BO'     # Your country for CRDA (use BO or GY if you want max tx power)
-
-[gs_mavlink]
-peer = 'connect://127.0.0.1:14550'  # outgoing connection
-# peer = 'listen://0.0.0.0:14550'   # incoming connection
-
-[gs_video]
-peer = 'connect://127.0.0.1:5600'  # outgoing connection for
-                                   # video sink (QGroundControl on GS)
-EOF
-
-cat > /etc/modprobe.d/wfb.conf << EOF
-# blacklist stock module
-blacklist 88XXau
-blacklist 8812au
-blacklist 8812
-options cfg80211 ieee80211_regdom=RU
-# maximize output power by default
-#options 88XXau_wfb rtw_tx_pwr_idx_override=30
-# minimize output power by default
-options 88XXau_wfb rtw_tx_pwr_idx_override=1
-options 8812eu rtw_tx_pwr_by_rate=0 rtw_tx_pwr_lmt_enable=0
-EOF
-
 if [ -f /etc/dhcpcd.conf ]; then
     echo "denyinterfaces $nics" >> /etc/dhcpcd.conf
 fi
-
-cat > /etc/motd <<__EOF__
-WFB-ng: http://wfb-ng.org
-Setup HOWTO: https://github.com/svpcom/wfb-ng/wiki/Setup-HOWTO
-Community chat: (wfb-ng support) https://t.me/wfb_ng
-
-Version: $release
-
-Quickstart (x86 laptop):
-1. Run "wfb-cli gs" to monitor link state
-2. Run QGroundControl
-
-Quickstart (SBC + RTP video):
-1. Run "wfb-cli gs" to monitor link state
-2. Edit /etc/wifibroadcast.cfg and in section [gs_video] set peer to ip address of your laptop with QGC
-3. Edit /etc/wifibroadcast.cfg and in section [gs_mavlink] set peer to ip address of your laptop with QGC
-4. Reboot SBC.
-5. Run QGroundControl on your laptop
-
-Quickstart (SBC + RTSP video):
-1. Run "wfb-cli gs" to monitor link state
-2. Run "sudo systemctl enable rtsp@h264" or "sudo systemctl enable rtsp@h265" (according to your video codec)
-3. Edit /etc/wifibroadcast.cfg and in section [gs_mavlink] set peer to ip address of your laptop with QGC
-4. Reboot SBC.
-5. Run QGroundControl on your laptop. Set video QGC source to rtsp://x.x.x.x:8554/wfb , where x.x.x.x is GS IP address.
-6. (optional) Run any other RTSP video player(s) for rtsp://x.x.x.x:8554/wfb
-
-To set TX power edit /etc/modprobe.d/wfb.conf and reboot.
-
-In case of any failures check "sudo systemctl status wifibroadcast@gs" service status.
-See full logs via: "sudo journalctl -xu wifibroadcast@gs"
-__EOF__
-
-# Start gs service
-systemctl daemon-reload
-systemctl start wifibroadcast@gs
-systemctl status wifibroadcast@gs
-systemctl enable wifibroadcast@gs
-
-echo "--------------------------------------------------------------------------------"
-echo
-cat /etc/motd
-echo
-echo "--------------------------------------------------------------------------------"
-echo "GS setup successfully finished"
