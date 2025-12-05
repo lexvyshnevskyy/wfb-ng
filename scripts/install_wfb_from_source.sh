@@ -41,10 +41,23 @@ apt -y install \
 
 # Build from existing repo directory
 cd "$REPO_ROOT"
+make clean || true
 make deb CFLAGS="-march=native"
 
+echo "[INFO] Installing built .deb packages via dpkg..."
+if ls deb_dist/*.deb >/dev/null 2>&1; then
+    dpkg -i deb_dist/*.deb || true
+    # Resolve missing dependencies
+    apt-get -f install -y
+else
+    echo "[ERR] No .deb found in deb_dist/. Build may have failed."
+    exit 1
+fi
+
+#chmod a+rx "$REPO_ROOT"/deb_dist
+#chmod a+r  "$REPO_ROOT"/deb_dist/*.deb
 # Install generated debs
-apt -y install "$REPO_ROOT"/deb_dist/*.deb
+#apt -y install "$REPO_ROOT"/deb_dist/*.deb
 
 # Basic config – you can trim/adjust this if your main script already does most of it
 (
