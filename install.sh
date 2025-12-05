@@ -829,6 +829,7 @@ Insert a flash drive and try again." 10 60
 
             echo "[INFO] Unmounting USB drive..."
             sudo umount "$MNT"
+            sudo rm "$MNT"
         else
             whiptail --title "Mount Error" --msgbox \
 "ERROR: Could not mount $USB_PART" 10 60
@@ -906,6 +907,80 @@ sudo rm -f /etc/gs.key
 echo "[INFO] DRONE (air) setup complete."
 
 sudo usermod -a -G dialout $USER
+
+###############################################################################
+# Optional: Load drone.key from USB flash drive (Drone / Air Unit)
+###############################################################################
+if whiptail --title "Load Drone Key" --yesno \
+"Attach the USB flash drive that contains the previously generated drone.key file.
+
+The key will be copied into /etc/drone.key on this device.
+
+Do you want to load the key from USB now?" \
+12 75; then
+
+    echo "[INFO] Scanning for USB flash drive..."
+
+    USB_DEV=""
+    for d in /dev/sd[a-z]*; do
+        [ -b "$d" ] || continue
+        if udevadm info "$d" 2>/dev/null | grep -q "ID_BUS=usb"; then
+            USB_DEV="$d"
+            break
+        fi
+    done
+
+    if [ -z "$USB_DEV" ]; then
+        whiptail --title "USB Not Found" --msgbox \
+"ERROR: No USB flash drive detected.
+
+Make sure it is plugged in and try again next time." 10 60
+    else
+        echo "[INFO] USB flash drive detected: $USB_DEV"
+
+        # Prefer partition (sda1) if it exists
+        if [ -b "${USB_DEV}1" ]; then
+            USB_PART="${USB_DEV}1"
+        else
+            USB_PART="$USB_DEV"
+        fi
+
+        MNT="/mnt/usbkey"
+        sudo mkdir -p "$MNT"
+
+        echo "[INFO] Mounting $USB_PART on $MNT..."
+        if sudo mount "$USB_PART" "$MNT"; then
+
+            if [ -f "$MNT/drone.key" ]; then
+                echo "[INFO] Found drone.key on USB. Copying to /etc/drone.key ..."
+                sudo cp "$MNT/drone.key" /etc/drone.key
+                sudo chmod 600 /etc/drone.key
+                sudo chown root:root /etc/drone.key
+
+                whiptail --title "Key Loaded" --msgbox \
+"drone.key has been copied to /etc/drone.key.
+
+The system will reboot now and use this key." 10 60
+            else
+                whiptail --title "Key Not Found" --msgbox \
+"drone.key was NOT found on the USB flash drive.
+
+Expected path: /drone.key" 10 60
+            fi
+
+            echo "[INFO] Unmounting USB drive..."
+            sudo umount "$MNT"
+            sudo rm "$MNT"
+        else
+            whiptail --title "Mount Error" --msgbox \
+"ERROR: Could not mount $USB_PART.
+
+Please check the drive and filesystem." 10 60
+        fi
+    fi
+else
+    echo "[INFO] User skipped loading drone key from USB."
+fi
 sudo reboot
             ;;
     esac
