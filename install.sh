@@ -162,7 +162,7 @@ Please check the drive/filesystem and try again." 10 70
 
     echo "[INFO] Unmounting USB drive..."
     sudo umount "$MNT"
-    sudo rm "$MNT"
+    sudo rm - r "$MNT"
 
     whiptail --title "Keys copied" --msgbox \
 "drone.key and gs.key have been copied to the USB flash drive.
@@ -933,7 +933,7 @@ Insert a flash drive and try again." 10 60
 
             echo "[INFO] Unmounting USB drive..."
             sudo umount "$MNT"
-            sudo rm "$MNT"
+            sudo rm -r "$MNT"
         else
             whiptail --title "Mount Error" --msgbox \
 "ERROR: Could not mount $USB_PART" 10 60
@@ -1074,7 +1074,7 @@ Expected path: /drone.key" 10 60
 
             echo "[INFO] Unmounting USB drive..."
             sudo umount "$MNT"
-            sudo rm "$MNT"
+            sudo rm -r "$MNT"
         else
             whiptail --title "Mount Error" --msgbox \
 "ERROR: Could not mount $USB_PART.
