@@ -17,10 +17,16 @@ sudo apt install -y \
   python3-twisted libpcap-dev libsodium-dev iw virtualenv \
   debhelper dh-python build-essential network-manager
 
-#!/bin/bash
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect boot layout (Bookworm vs legacy)
+if [ -d /boot/firmware ]; then
+    CMDLINE_FILE="/boot/firmware/cmdline.txt"
+    CONFIG_FILE="/boot/firmware/config.txt"
+else
+    CMDLINE_FILE="/boot/cmdline.txt"
+    CONFIG_FILE="/boot/config.txt"
+fi
 
 ###############################################################################
 # Main menu – choose what to do
@@ -93,15 +99,15 @@ case "$BOARD_CHOICE" in
         # Enable UART for MAVLink (Pi 3/4/5, Bookworm layout: /boot/firmware)
         # -----------------------------
         # Remove any existing serial console on UART
-        sudo sed -i 's/console=serial0,[0-9]* //g' /boot/firmware/cmdline.txt
-        sudo sed -i 's/console=ttyAMA0,[0-9]* //g' /boot/firmware/cmdline.txt
+        sudo sed -i 's/console=serial0,[0-9]* //g' "$CMDLINE_FILE" || true
+        sudo sed -i 's/console=ttyAMA0,[0-9]* //g' "$CMDLINE_FILE" || true
 
         # Clean previous UART/Bluetooth lines to avoid duplicates
-        sudo sed -i '/^enable_uart=/d' /boot/firmware/config.txt
-        sudo sed -i '/^dtoverlay=disable-bt/d' /boot/firmware/config.txt
+        sudo sed -i '/^enable_uart=/d' "$CONFIG_FILE" || true
+        sudo sed -i '/^dtoverlay=disable-bt/d' "$CONFIG_FILE" || true
 
         # Enable UART and disable BT to free UART on GPIO14/15
-        sudo tee -a /boot/firmware/config.txt > /dev/null <<EOF
+        sudo tee -a "$CONFIG_FILE" > /dev/null <<EOF
 # Enable UART for MAVLink
 enable_uart=1
 # Disable Bluetooth to free primary UART for GPIO14/15
@@ -158,7 +164,7 @@ EOF
                 sudo swapon /swapfile
 
         # Enable UART and disable BT to free UART on GPIO14/15
-        sudo tee -a /boot/firmware/config.txt > /dev/null <<EOF
+        sudo tee -a "$CONFIG_FILE" > /dev/null <<EOF
 # Decrease video memory size
 gpu_mem=8
 EOF
@@ -171,14 +177,19 @@ EOF
                 # Enable UART for MAVLink
                 # (Bookworm layout: /boot/firmware)
                 # -----------------------------
-                sudo sed -i 's/console=serial0,[0-9]* //g' /boot/firmware/cmdline.txt
-                sudo sed -i 's/console=ttyAMA0,[0-9]* //g' /boot/firmware/cmdline.txt
+                sudo sed -i 's/console=serial0,[0-9]* //g' "$CMDLINE_FILE" || true
+                sudo sed -i 's/console=ttyAMA0,[0-9]* //g' "$CMDLINE_FILE" || true
 
-                sudo tee -a /boot/firmware/config.txt > /dev/null <<EOF
-        # Enable UART for MAVLink
-        enable_uart=1
-        # Disable Bluetooth (Pi Zero 2W only)
-        dtoverlay=disable-bt
+                # Clean previous UART/Bluetooth lines to avoid duplicates
+                sudo sed -i '/^enable_uart=/d' "$CONFIG_FILE" || true
+                sudo sed -i '/^dtoverlay=disable-bt/d' "$CONFIG_FILE" || true
+
+                # Enable UART and disable BT to free UART on GPIO14/15
+                sudo tee -a "$CONFIG_FILE" > /dev/null <<EOF
+# Enable UART for MAVLink
+enable_uart=1
+# Disable Bluetooth to free primary UART for GPIO14/15
+dtoverlay=disable-bt
 EOF
             sudo reboot
             exit 0
@@ -296,6 +307,8 @@ if [ $? -eq 0 ]; then
 
     echo "[OK] New driver installed and module loaded ($DRIVER_MODULE)."
   fi
+else
+  echo "[INFO] Keeping existing wireless drivers; skipping driver reinstall."
 fi
 
 # Preconfiguration power state of card
