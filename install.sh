@@ -773,6 +773,71 @@ else
     echo "[INFO] Skipped eth0 static IP configuration."
 fi
 
+###############################################################################
+# Offer to copy drone.key to USB flash drive
+###############################################################################
+if whiptail --title "Copy Drone Key" --yesno \
+"Please attach a USB flash drive.\n\nDrone key (~/drone.key) can be copied to the flash drive for safe keeping.\n\nDo you want to continue?" \
+12 70; then
+
+    echo "[INFO] Waiting for USB flash drive..."
+
+    # Find any /dev/sdX or /dev/sdX1 block device that is removable
+    USB_DEV=""
+    for d in /dev/sd[a-z]*; do
+        # skip if not block device
+        [ -b "$d" ] || continue
+
+        # Check if removable
+        if udevadm info $d | grep -q "ID_BUS=usb"; then
+            USB_DEV="$d"
+            break
+        fi
+    done
+
+    if [ -z "$USB_DEV" ]; then
+        whiptail --title "USB Not Found" --msgbox \
+"ERROR: No USB flash drive detected.
+
+Insert a flash drive and try again." 10 60
+    else
+        echo "[INFO] USB flash drive detected: $USB_DEV"
+
+        # If it's a whole disk (sda), prefer partition (sda1)
+        if [ -b "${USB_DEV}1" ]; then
+            USB_PART="${USB_DEV}1"
+        else
+            USB_PART="$USB_DEV"
+        fi
+
+        # Create mount point
+        MNT="/mnt/usbkey"
+        sudo mkdir -p "$MNT"
+
+        echo "[INFO] Mounting $USB_PART..."
+        if sudo mount "$USB_PART" "$MNT"; then
+
+            if [ -f ~/drone.key ]; then
+                sudo cp ~/drone.key "$MNT/"
+                sync
+                whiptail --title "Done" --msgbox \
+"Drone key successfully copied to USB flash drive.\n\nFile: drone.key" 10 60
+            else
+                whiptail --title "Error" --msgbox \
+"drone.key was not found in home directory!" 10 60
+            fi
+
+            echo "[INFO] Unmounting USB drive..."
+            sudo umount "$MNT"
+        else
+            whiptail --title "Mount Error" --msgbox \
+"ERROR: Could not mount $USB_PART" 10 60
+        fi
+    fi
+else
+    echo "[INFO] User skipped copying drone.key"
+fi
+
 sudo reboot
             ;;
         2)
