@@ -2,6 +2,17 @@
 ## Original Wiki: [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/svpcom/wfb-ng)
 See https://github.com/svpcom/wfb-ng/wiki for additional info
 
+## What this version could
+1. dialog based setup
+2. you could choose which board used (rpi 3-4-5, pi zero 2w, radxa 3w, radxa3e)
+3. role based on selected board
+4. Fixed drivers. No error in compilation
+5. Fixed installing process
+6. Select driver which we will use
+7. you can choose: use original deb from SVcom repository or build one from source
+8. manual ip configuration from menu
+9. key transfer via usb, regenerate key-pairs, load new keys, switch roles, etc.
+
 ## Installation:
 To install this fork run next commands
 
