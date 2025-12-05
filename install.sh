@@ -253,6 +253,9 @@ if [ $? -eq 0 ]; then
     sudo dkms uninstall -m rtl88x2eu -v 5.15.0.1 --all || true
     sudo dkms remove -m rtl88x2eu -v 5.15.0.1 --all || true
 
+    sudo rm -r /usr/src/rtl8812au-5.2.20.2/
+
+
     whiptail --title "Installing drivers" --msgbox "Installing $DRIVER_NAME driver..." 10 50
     git config --global http.postBuffer 157286400
 
@@ -267,32 +270,25 @@ if [ $? -eq 0 ]; then
     if [ "$BOARD_TYPE" = "rpi_zero2" ] || \
        [ "$BOARD_TYPE" = "radxa_zero3_eth" ] || \
        [ "$BOARD_TYPE" = "radxa_zero3_wifi" ]; then
-
-        if [ -f dkms.conf ]; then
-            echo "[INFO] Adjusting dkms.conf MAKE jobs for small board..."
-
-            if [ "$BOARD_TYPE" = "rpi_zero2" ]; then
-                # Pi Zero 2W → force make -j3
-                 JOBS=3
-            else
-                # Calculate jobs: min( nproc-1 , 16 ), but at least 1
-                JOBS=$(nproc)
-                if [ "$JOBS" -gt 1 ]; then
-                    JOBS=$((JOBS-1))
-                fi
-                if [ "$JOBS" -gt 16 ]; then
-                    JOBS=16
-                fi
-
-            fi
-        fi
+       echo "[INFO] Adjusting dkms.conf MAKE jobs for small board..."
+       JOBS=3
+    else
+       # Calculate jobs: min( nproc-1 , 16 ), but at least 1
+       JOBS=$(nproc)
+       if [ "$JOBS" -gt 1 ]; then
+           JOBS=$((JOBS-1))
+           fi
+       if [ "$JOBS" -gt 16 ]; then
+           JOBS=16
+       fi
     fi
 
-            # Replace MAKE= line with fixed -j<JOBS>
+    # Replace MAKE= line with fixed -j<JOBS>
     sudo sed -i \
          "s|^MAKE=.*|MAKE=\"'make' -j${JOBS} KVER=\${kernelver} KSRC=/lib/modules/\${kernelver}/build\"|" \
          dkms.conf
     echo "[INFO] dkms.conf: using make -j${JOBS}"
+
     sudo ./dkms-install.sh
     sudo modprobe "$DRIVER_MODULE"
     cd /
