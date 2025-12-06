@@ -9,6 +9,7 @@ cleanup() {
     if [ $MOUNTED -eq 1 ]; then
         echo "[INFO] Unmounting USB drive..."
         sudo umount "$MNT" || true
+        sudo rm -r "$MNT"
         MOUNTED=0
     fi
 }
